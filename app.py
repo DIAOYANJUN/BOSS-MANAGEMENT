@@ -124,11 +124,10 @@ if not st.session_state.logged_in:
                     st.error("用户名不存在或密码错误！(默认测试密码可输入 123)")
     st.stop()
 
-# ---------------- 3. 主体系统界面与侧边栏（采用标准组件渲染时钟） ----------------
+# ---------------- 3. 主体系统界面与侧边栏 ----------------
 st.title("📋 小店智能备忘录与协同系统")
 current_role = st.session_state.user_role
 
-# 🌟 修正：直接使用 st.components.v1.html 放入侧边栏
 clock_html = """
 <div style="font-family: sans-serif; font-size: 13px; font-weight: bold; color: #31333F; background: #f0f2f6; padding: 8px; border-radius: 6px; text-align: center;">
     🕒 <span id="clock">获取时间中...</span>
@@ -230,12 +229,30 @@ def sort_memos(memos, sort_option):
         return sorted(memos, key=lambda x: x["date"], reverse=True)
     return memos
 
-# ---------------- 4. 员工端 ----------------
-if current_role == "staff":
-    render_memo_input_form("staff")
+# ---------------- 4. 顶部快捷操作栏（增加备忘录 & 手机号搜索备忘录） ----------------
+st.markdown("---")
+top_col1, top_col2, top_col3 = st.columns([1, 1, 2])
 
+with top_col1:
+    show_add_form = st.toggle("➕ 增加备忘录", value=False)
+with top_col2:
+    show_search = st.toggle("🔍 搜索备忘录", value=False)
+
+# 如果开启了“增加备忘录”开关，弹出录入表单
+if show_add_form:
+    render_memo_input_form("top_add_form")
     st.markdown("---")
-    
+
+# 如果开启了“搜索备忘录”开关，显示手机号搜索输入框
+search_phone_query = ""
+if show_search:
+    with st.container():
+        st.info("💡 提示：请输入客户的完整手机号或部分手机号数字进行实时精准检索。")
+        search_phone_query = st.text_input("📞 输入手机号搜索", placeholder="例如：138 或 1234...")
+    st.markdown("---")
+
+# ---------------- 5. 员工端 ----------------
+if current_role == "staff":
     col_title, col_sort = st.columns([2, 2])
     with col_title:
         st.subheader("📝 近期备忘与进度申请中心")
@@ -247,6 +264,11 @@ if current_role == "staff":
         )
     
     memos = load_memos()
+    
+    # 如果开启了手机号搜索，进行过滤
+    if show_search and search_phone_query.strip():
+        memos = [m for m in memos if search_phone_query.strip() in m.get("phone", "")]
+    
     memos = sort_memos(memos, sort_option)
     
     for m in memos:
@@ -299,7 +321,7 @@ if current_role == "staff":
 
             st.markdown("---")
 
-# ---------------- 5. 老板娘端 ----------------
+# ---------------- 6. 老板娘端 ----------------
 else:
     st.subheader("👑 老板娘核心看板与审批中心")
     
@@ -308,18 +330,13 @@ else:
     total_count = len(memos)
     urgent_count = sum(1 for m in memos if m["is_urgent"] and m["status"] not in ["已完成", "待删除审核"])
     pending_approval_count = sum(1 for m in memos if m["status"] in ["待审核", "待删除审核"])
-    total_revenue = sum(m["fee"] for m in memos if m["status"] not in ["已完成", "待删除审核"])
+    total_revenue = sum(m["fee"] for m in memos if m["status"] not in ["_完成", "已完成", "待删除审核"] and m["status"] != "已完成")
     
     col_a, col_b, col_c, col_d = st.columns(4)
     col_a.metric("总单数", f"{total_count} 单")
     col_b.metric("🔥 紧急加急", f"{urgent_count} 单")
     col_c.metric("⏳ 待审批事项", f"{pending_approval_count} 单")
     col_d.metric("💰 进行中总营收", f"￥{total_revenue:.2f}")
-    
-    st.markdown("---")
-    
-    with st.expander("➕ 紧急情况：点击这里展开【快速录入新单】"):
-        render_memo_input_form("boss")
     
     st.markdown("---")
     
@@ -341,13 +358,17 @@ else:
     elif filter_option == "已完成单子":
         filtered_memos = [m for m in memos if m["status"] == "已完成"]
     
+    # 如果开启了手机号搜索，叠加过滤
+    if show_search and search_phone_query.strip():
+        filtered_memos = [m for m in filtered_memos if search_phone_query.strip() in m.get("phone", "")]
+    
     filtered_memos = sort_memos(filtered_memos, sort_option)
     
     st.markdown(f"**当前显示记录数**：{len(filtered_memos)} 条")
     st.markdown("---")
     
     if not filtered_memos:
-        st.info("当前筛选目录下没有单子。")
+        st.info("当前筛选或搜索条件下没有找到单子。")
     else:
         for m in filtered_memos:
             if m["status"] == "已完成":
