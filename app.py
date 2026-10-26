@@ -102,7 +102,7 @@ if cookie_logged == "true":
     st.session_state.user_role = cookie_role if cookie_role else "staff"
 
 if not st.session_state.logged_in:
-    st.title("🔐 小店智能备忘录系统登录")
+    st.title("🔐 智能备忘录系统登录")
     st.markdown("---")
     
     col_img, col_login = st.columns([1, 1], gap="large")
