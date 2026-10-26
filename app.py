@@ -152,7 +152,6 @@ if st.sidebar.button("🚪 退出登录", use_container_width=True):
 def render_memo_input_form(form_key_suffix=""):
     st.subheader("✍️ 快速登记客户预约与备忘")
     
-    # 使用 st.form 配合表单提交按钮，提交成功后会自动清空所有输入框
     with st.form(f"memo_input_form_{form_key_suffix}", clear_on_submit=True):
         col1, col2 = st.columns(2)
         with col1:
@@ -197,9 +196,9 @@ def sort_memos(memos, sort_option):
         return sorted(memos, key=lambda x: x["fee"], reverse=True)
     elif sort_option == "金额：从低到高 ⬆️":
         return sorted(memos, key=lambda x: x["fee"], reverse=False)
-    elif sort_option == "日期：由近到远（最紧迫） ⏰":
+    elif sort_option == "日期：由早到迟（最早的在前） ⏰":
         return sorted(memos, key=lambda x: x["date"], reverse=False)
-    elif sort_option == "日期：由远到近 📅":
+    elif sort_option == "日期：由迟到早（最晚的在前） 📅":
         return sorted(memos, key=lambda x: x["date"], reverse=True)
     return memos
 
@@ -215,7 +214,7 @@ if current_role == "staff":
     with col_sort:
         sort_option = st.selectbox(
             "🔀 排序方式",
-            ["默认排序", "日期：由近到远（最紧迫） ⏰", "日期：由远到近 📅", "金额：从高到低 ⬇️", "金额：从低到高 ⬆️"],
+            ["默认排序", "日期：由早到迟（最早的在前） ⏰", "日期：由迟到早（最晚的在前） 📅", "金额：从高到低 ⬇️", "金额：从低到高 ⬆️"],
             key="staff_sort"
         )
     
@@ -299,7 +298,7 @@ else:
     with col_sort:
         sort_option = st.selectbox(
             "🔀 列表排序方式",
-            ["默认排序", "日期：由近到远（最紧迫） ⏰", "日期：由远到近 📅", "金额：从高到低 ⬇️", "金额：从低到高 ⬆️"],
+            ["默认排序", "日期：由早到迟（最早的在前） ⏰", "日期：由迟到早（最晚的在前） 📅", "金额：从高到低 ⬇️", "金额：从低到高 ⬆️"],
             key="boss_sort"
         )
     
