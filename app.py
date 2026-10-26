@@ -76,7 +76,7 @@ def get_default_memos():
         }
     ]
 
-# ---------------- 2. 智能登录保持（刷新不掉线） ----------------
+# ---------------- 2. 智能登录保持（左右分栏，绝不挡住输入框） ----------------
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "user_role" not in st.session_state:
@@ -90,16 +90,23 @@ if query_params.get("logged") == "true":
 if not st.session_state.logged_in:
     st.title("🔐 小店智能备忘录系统登录")
     st.markdown("---")
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        # 🌟 登录页放 bubu.jpeg
+    
+    # 🌟 左右分栏：左边放图片装饰，右边放登录表单，互不干扰！
+    col_img, col_login = st.columns([1, 1], gap="large")
+    
+    with col_img:
+        st.markdown("### 🐾 欢迎来到小店！")
         if os.path.exists("bubu.jpeg"):
-            st.image("bubu.jpeg", use_container_width=True)
+            st.image("bubu.jpeg", use_container_width=True, caption="bubu")
+        if os.path.exists("yier.jpeg"):
+            st.image("yier.jpeg", use_container_width=True, caption="yier")
             
+    with col_login:
+        st.markdown("### 🚀 请输入账号密码")
         with st.form("login_form"):
             username = st.text_input("用户名 (staff 或 boss)")
             password = st.text_input("密码", type="password")
-            submit = st.form_submit_button("🚀 登录系统")
+            submit = st.form_submit_button("🚀 登录系统", use_container_width=True)
             if submit:
                 try:
                     correct_pwd = st.secrets["passwords"][username]
@@ -132,17 +139,13 @@ else:
 if os.path.exists("lulu.jpeg"):
     st.sidebar.image("lulu.jpeg", use_container_width=True)
 
-# 🌟 侧边栏下方再放 yier.jpeg
-if os.path.exists("yier.jpeg"):
-    st.sidebar.image("yier.jpeg", use_container_width=True)
-
 st.sidebar.markdown("---")
 
-if st.sidebar.button("🔄 刷新并核对备忘状态", type="primary"):
+if st.sidebar.button("🔄 刷新并核对备忘状态", type="primary", use_container_width=True):
     st.toast("已成功重新加载最新备忘录状态！", icon="✅")
     st.rerun()
 
-if st.sidebar.button("🚪 退出登录"):
+if st.sidebar.button("🚪 退出登录", use_container_width=True):
     st.query_params.clear()
     st.session_state.logged_in = False
     st.rerun()
