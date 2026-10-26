@@ -141,7 +141,7 @@ if not st.session_state.logged_in:
     st.stop()
 
 # ---------------- 3. 主体系统界面与侧边栏 ----------------
-st.title("📋 小店智能备忘录与协同系统")
+st.title("📋 智能备忘录与协同系统")
 current_role = st.session_state.user_role
 
 clock_html = """
