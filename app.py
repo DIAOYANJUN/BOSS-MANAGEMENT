@@ -224,7 +224,7 @@ def render_memo_input_form(form_key_suffix=""):
         st.success(st.session_state["success_msg"])
         del st.session_state["success_msg"]
 
-# ---------------- 排序助手函数（增加未收款专属智能排序） ----------------
+# ---------------- 排序助手函数 ----------------
 def sort_memos(memos, sort_option):
     if sort_option == "金额：从高到低 ⬇️":
         return sorted(memos, key=lambda x: x["fee"], reverse=True)
@@ -235,7 +235,6 @@ def sort_memos(memos, sort_option):
     elif sort_option == "日期：由迟到早（最晚的在前） 📅":
         return sorted(memos, key=lambda x: x["date"], reverse=True)
     elif sort_option == "未收款：由时间越久没收款开始排序 ⏳":
-        # 未收款项置顶，且按照日期从早到迟（欠款时间越久越靠前）排序
         def unpaid_sort_key(x):
             is_unpaid = 0 if x["status"] in ["申请完成（未收款）", "已完成（未收款）"] else 1
             return (is_unpaid, x["date"])
@@ -305,7 +304,6 @@ if current_role == "staff":
             """)
             
             if m["status"] == "进行中":
-                # 🌟 员工端支持两种完成申请：已收款 vs 未收款
                 col_btn_s1, col_btn_s2 = st.columns(2)
                 with col_btn_s1:
                     if st.button("👉 申请完成（已收款）", key=f"staff_apply_{m['id']}"):
@@ -335,8 +333,19 @@ if current_role == "staff":
                             st.success("删除申请已提交！")
                             st.rerun()
 
-            elif m["status"] in ["待审核", "申请完成（未收款）"]:
-                st.info("📌 已提交完成申请，等待老板娘审批确认中...")
+            # 🌟 核心增加：如果处于任何审核状态中，员工端可以一键“取消申请、恢复为进行中”
+            elif m["status"] in ["待审核", "申请完成（未收款）", "待删除审核"]:
+                col_info, col_cancel = st.columns([3, 1])
+                with col_info:
+                    st.info("📌 已提交审核申请，等待老板娘审批确认中...")
+                with col_cancel:
+                    if st.button("↩️ 取消申请", key=f"staff_cancel_req_{m['id']}"):
+                        m["status"] = "进行中"
+                        m["delete_reason"] = ""
+                        save_memos(memos)
+                        st.warning("已成功取消申请，恢复为进行中状态！")
+                        st.rerun()
+
             elif m["status"] == "已完成（未收款）":
                 st.warning("⚠️ 此单已由老板娘标记为完成，但目前【尚未收到款项】，等待催收。")
             elif m["status"] == "已完成":
@@ -391,7 +400,7 @@ else:
     st.markdown("---")
     
     if not filtered_memos:
-        st.info("当前筛选或搜索条件下没有找到单子。")
+        st.info("当前筛选或搜索目录下没有找到单子。")
     else:
         for m in filtered_memos:
             if m["status"] == "已完成":
