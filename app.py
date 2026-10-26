@@ -15,7 +15,7 @@ st.set_page_config(
 
 DATA_FILE = "memos.json"
 
-# ---------------- 1. 极速双向同步与诊断机制 ----------------
+# ---------------- 1. 核心数据读写与同步 ----------------
 def get_github_config():
     try:
         gh_token = st.secrets["github"]["token"]
@@ -34,12 +34,10 @@ def load_memos():
     return get_default_memos()
 
 def save_memos(memos):
-    # 1. 瞬间写入本地文件（保证零延迟响应，绝不卡顿）
     content_str = json.dumps(memos, ensure_ascii=False, indent=4)
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         f.write(content_str)
     
-    # 2. 后台静默尝试推送到 GitHub
     token, repo = get_github_config()
     if not token or not repo:
         return
@@ -59,7 +57,7 @@ def save_memos(memos):
         }
         requests.put(url, headers=headers, json=data, timeout=3)
     except Exception:
-        pass # 网络不好时静默跳过，保证本地丝滑
+        pass
 
 def get_default_memos():
     return [
@@ -78,11 +76,17 @@ def get_default_memos():
         }
     ]
 
-# ---------------- 2. 安全密码登录验证 ----------------
+# ---------------- 2. 智能登录保持（利用网址参数实现【刷新不掉线】） ----------------
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "user_role" not in st.session_state:
     st.session_state.user_role = "staff"
+
+# 检查 URL 网址里是不是带了登录凭证（实现刷新不掉线）
+query_params = st.query_params
+if query_params.get("logged") == "true":
+    st.session_state.logged_in = True
+    st.session_state.user_role = query_params.get("role", "staff")
 
 if not st.session_state.logged_in:
     st.title("🔐 小店智能备忘录系统登录")
@@ -103,13 +107,16 @@ if not st.session_state.logged_in:
                 if correct_pwd and password == correct_pwd:
                     st.session_state.logged_in = True
                     st.session_state.user_role = "boss" if username == "boss" else "staff"
+                    # 把登录状态写入网址栏，这样按刷新也不会掉线了！
+                    st.query_params["logged"] = "true"
+                    st.query_params["role"] = st.session_state.user_role
                     st.success("登录成功！正在进入...")
                     st.rerun()
                 else:
                     st.error("用户名不存在或密码错误！(默认测试密码可输入 123)")
     st.stop()
 
-# ---------------- 3. 主体系统界面 ----------------
+# ---------------- 3. 主体系统界面与侧边栏（内置状态刷新检查） ----------------
 st.title("📋 小店智能备忘录与协同系统")
 current_role = st.session_state.user_role
 
@@ -119,7 +126,16 @@ if current_role == "boss":
 else:
     st.sidebar.info("✍️ 员工模式：登记、申请完成与申请删除")
 
+st.sidebar.markdown("---")
+
+# 🌟 新增：内置的刷新备忘录各项状态与检查按钮
+if st.sidebar.button("🔄 刷新并核对备忘状态", type="primary"):
+    st.toast("已成功重新加载最新备忘录状态！", icon="✅")
+    st.rerun()
+
 if st.sidebar.button("🚪 退出登录"):
+    # 清空网址登录参数并退出
+    st.query_params.clear()
     st.session_state.logged_in = False
     st.rerun()
 
