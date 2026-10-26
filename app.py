@@ -148,54 +148,79 @@ if st.sidebar.button("🚪 退出登录", use_container_width=True):
     st.session_state.logged_in = False
     st.rerun()
 
-# ---------------- 公共函数：渲染录入表单（员工和老板娘共用） ----------------
-def render_memo_input_form():
+# ---------------- 公共函数：渲染可清空的录入表单 ----------------
+def render_memo_input_form(form_key_suffix=""):
     st.subheader("✍️ 快速登记客户预约与备忘")
-    col1, col2 = st.columns(2)
-    with col1:
-        client_name = st.text_input("客户姓名 / 称呼 *", key="input_client")
-        phone = st.text_input("联系电话", key="input_phone")
-        address = st.text_input("上门服务地址", key="input_address")
-    with col2:
-        service = st.text_input("服务项目 *", key="input_service")
-        fee = st.number_input("预计费用 (￥)", min_value=0.0, value=0.0, step=10.0, key="input_fee")
-        date = st.date_input("预约日期", value=datetime.now(), key="input_date")
     
-    desc = st.text_area("详细备注", key="input_desc")
-    is_urgent = st.checkbox("🔥 标记为【加急件 / 优先处理】", value=False, key="input_urgent")
-    
-    submitted = st.button("✅ 提交并保存备忘", type="primary")
-    if submitted:
-        if not client_name or not service:
-            st.error("⚠️ 录入失败：请完整填写【客户姓名】和【服务项目】！")
-        else:
-            memos = load_memos()
-            new_item = {
-                "id": int(datetime.now().timestamp()),
-                "client_name": client_name,
-                "phone": phone,
-                "address": address,
-                "service": service,
-                "fee": fee,
-                "date": str(date),
-                "is_urgent": is_urgent,
-                "status": "进行中",
-                "memo_desc": desc,
-                "delete_reason": ""
-            }
-            memos.insert(0, new_item)
-            save_memos(memos)
-            st.success("🎉 登记成功！")
-            st.rerun()
+    # 使用 st.form 配合表单提交按钮，提交成功后会自动清空所有输入框
+    with st.form(f"memo_input_form_{form_key_suffix}", clear_on_submit=True):
+        col1, col2 = st.columns(2)
+        with col1:
+            client_name = st.text_input("客户姓名 / 称呼 *")
+            phone = st.text_input("联系电话")
+            address = st.text_input("上门服务地址")
+        with col2:
+            service = st.text_input("服务项目 *")
+            fee = st.number_input("预计费用 (￥)", min_value=0.0, value=0.0, step=10.0)
+            date = st.date_input("预约日期", value=datetime.now())
+        
+        desc = st.text_area("详细备注")
+        is_urgent = st.checkbox("🔥 标记为【加急件 / 优先处理】", value=False)
+        
+        submitted = st.form_submit_button("✅ 提交并保存备忘", use_container_width=True)
+        if submitted:
+            if not client_name or not service:
+                st.error("⚠️ 录入失败：请完整填写【客户姓名】和【服务项目】！")
+            else:
+                memos = load_memos()
+                new_item = {
+                    "id": int(datetime.now().timestamp()),
+                    "client_name": client_name,
+                    "phone": phone,
+                    "address": address,
+                    "service": service,
+                    "fee": fee,
+                    "date": str(date),
+                    "is_urgent": is_urgent,
+                    "status": "进行中",
+                    "memo_desc": desc,
+                    "delete_reason": ""
+                }
+                memos.insert(0, new_item)
+                save_memos(memos)
+                st.success("🎉 保存成功！内容已自动清空，可继续录入下一单。")
+                st.rerun()
+
+# ---------------- 排序助手函数 ----------------
+def sort_memos(memos, sort_option):
+    if sort_option == "金额：从高到低 ⬇️":
+        return sorted(memos, key=lambda x: x["fee"], reverse=True)
+    elif sort_option == "金额：从低到高 ⬆️":
+        return sorted(memos, key=lambda x: x["fee"], reverse=False)
+    elif sort_option == "日期：由近到远（最紧迫） ⏰":
+        return sorted(memos, key=lambda x: x["date"], reverse=False)
+    elif sort_option == "日期：由远到近 📅":
+        return sorted(memos, key=lambda x: x["date"], reverse=True)
+    return memos
 
 # ---------------- 4. 员工端 ----------------
 if current_role == "staff":
-    render_memo_input_form()
+    render_memo_input_form("staff")
 
     st.markdown("---")
-    st.subheader("📝 近期备忘与进度申请中心")
+    
+    col_title, col_sort = st.columns([2, 2])
+    with col_title:
+        st.subheader("📝 近期备忘与进度申请中心")
+    with col_sort:
+        sort_option = st.selectbox(
+            "🔀 排序方式",
+            ["默认排序", "日期：由近到远（最紧迫） ⏰", "日期：由远到近 📅", "金额：从高到低 ⬇️", "金额：从低到高 ⬆️"],
+            key="staff_sort"
+        )
     
     memos = load_memos()
+    memos = sort_memos(memos, sort_option)
     
     for m in memos:
         if m["status"] == "已完成":
@@ -263,13 +288,20 @@ else:
     
     st.markdown("---")
     
-    # 🌟 增加折叠菜单：老板娘随时可以展开/收起“快速录单”功能
     with st.expander("➕ 紧急情况：点击这里展开【快速录入新单】"):
-        render_memo_input_form()
+        render_memo_input_form("boss")
     
     st.markdown("---")
     
-    filter_option = st.radio("看板筛选", ["全部显示", "⏳ 待审批的单子", "🔥 仅看加急件", "已完成单子"], horizontal=True)
+    col_filter, col_sort = st.columns([3, 2])
+    with col_filter:
+        filter_option = st.radio("看板筛选", ["全部显示", "⏳ 待审批的单子", "🔥 仅看加急件", "已完成单子"], horizontal=True)
+    with col_sort:
+        sort_option = st.selectbox(
+            "🔀 列表排序方式",
+            ["默认排序", "日期：由近到远（最紧迫） ⏰", "日期：由远到近 📅", "金额：从高到低 ⬇️", "金额：从低到高 ⬆️"],
+            key="boss_sort"
+        )
     
     filtered_memos = memos
     if filter_option == "⏳ 待审批的单子":
@@ -278,6 +310,9 @@ else:
         filtered_memos = [m for m in memos if m["is_urgent"]]
     elif filter_option == "已完成单子":
         filtered_memos = [m for m in memos if m["status"] == "已完成"]
+    
+    # 执行排序
+    filtered_memos = sort_memos(filtered_memos, sort_option)
     
     st.markdown(f"**当前显示记录数**：{len(filtered_memos)} 条")
     st.markdown("---")
