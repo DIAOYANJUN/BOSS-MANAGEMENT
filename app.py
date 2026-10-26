@@ -15,7 +15,7 @@ st.set_page_config(
 
 DATA_FILE = "memos.json"
 
-# ---------------- 1. 极速双向同步机制（确保移动端不卡顿） ----------------
+# ---------------- 1. 极速双向同步与诊断机制 ----------------
 def get_github_config():
     try:
         gh_token = st.secrets["github"]["token"]
@@ -24,11 +24,7 @@ def get_github_config():
     except Exception:
         return None, None
 
-# 加载数据：优先读本地，秒级响应；同时尝试从云端拉取最新
-to_github_token, to_github_repo = get_github_config()
-
 def load_memos():
-    # 本地文件存在则直接读取（保证移动端点按丝滑、绝对不卡顿）
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, "r", encoding="utf-8") as f:
@@ -38,12 +34,12 @@ def load_memos():
     return get_default_memos()
 
 def save_memos(memos):
-    # 1. 瞬间写入本地文件（保证零延迟响应）
+    # 1. 瞬间写入本地文件（保证零延迟响应，绝不卡顿）
     content_str = json.dumps(memos, ensure_ascii=False, indent=4)
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         f.write(content_str)
     
-    # 2. 如果配置了 GitHub，在后台异步推送（不阻塞前端点击）
+    # 2. 后台静默尝试推送到 GitHub
     token, repo = get_github_config()
     if not token or not repo:
         return
@@ -57,13 +53,13 @@ def save_memos(memos):
         
         content_encoded = base64.b64encode(content_str.encode("utf-8")).decode("utf-8")
         data = {
-            "message": f"Quick sync at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            "message": f"Sync memo at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
             "content": content_encoded,
             "sha": sha
         }
         requests.put(url, headers=headers, json=data, timeout=3)
     except Exception:
-        pass # 网络不好时静默跳过，绝不卡死前端操作
+        pass # 网络不好时静默跳过，保证本地丝滑
 
 def get_default_memos():
     return [
@@ -89,7 +85,7 @@ if "user_role" not in st.session_state:
     st.session_state.user_role = "staff"
 
 if not st.session_state.logged_in:
-    st.title("🔐 小店备忘录系统登录")
+    st.title("🔐 小店智能备忘录系统登录")
     st.markdown("---")
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
@@ -164,7 +160,7 @@ if current_role == "staff":
                 "delete_reason": ""
             }
             memos.insert(0, new_item)
-            save_memos(memos) # 瞬间响应，绝不卡顿
+            save_memos(memos)
             st.success("🎉 登记成功！")
             st.rerun()
 
