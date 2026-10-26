@@ -7,12 +7,22 @@ import os
 from datetime import datetime
 from streamlit_cookies_controller import CookieController
 
-# ---------------- 0. 页面配置与 Cookie 控制器初始化 ----------------
+# ---------------- 0. 页面配置与 CSS 隐藏官方杂项 ----------------
 st.set_page_config(
     page_title="小店智能备忘录与协同系统",
     page_icon="📋",
     layout="wide"
 )
+
+# 🌟 核心：注入一行专属 CSS，把右上角讨厌的 “Clear Cache” 和菜单图标彻底隐藏，让界面清爽干净！
+hide_streamlit_style = """
+<style>
+#MainMenu {visibility: hidden;}
+header {visibility: hidden;}
+footer {visibility: hidden;}
+</style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 cookie_controller = CookieController()
 DATA_FILE = "memos.json"
@@ -333,7 +343,6 @@ if current_role == "staff":
                             st.success("删除申请已提交！")
                             st.rerun()
 
-            # 🌟 核心增加：如果处于任何审核状态中，员工端可以一键“取消申请、恢复为进行中”
             elif m["status"] in ["待审核", "申请完成（未收款）", "待删除审核"]:
                 col_info, col_cancel = st.columns([3, 1])
                 with col_info:
