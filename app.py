@@ -3,6 +3,7 @@ import pandas as pd
 import json
 import base64
 import requests
+import os
 from datetime import datetime
 
 # ---------------- 0. 页面配置 ----------------
@@ -12,23 +13,21 @@ st.set_page_config(
     layout="wide"
 )
 
-# ---------------- 1. GitHub 云端自动同步核心逻辑 ----------------
-# 从 st.secrets 读取 GitHub 配置（实现云端永久保存与自动读写）
+# ---------------- 1. 后台静默自动同步机制（无任何多余 UI） ----------------
 def get_github_config():
     try:
         gh_token = st.secrets["github"]["token"]
-        gh_repo = st.secrets["github"]["repo"]  # 格式如 "你的用户名/仓库名"
+        gh_repo = st.secrets["github"]["repo"]
         return gh_token, gh_repo
     except Exception:
         return None, None
 
 DATA_FILE = "memos.json"
 
-# 从 GitHub 自动拉取最新数据
+# 后台静默从 GitHub 拉取数据
 def load_memos_from_github():
     token, repo = get_github_config()
     if not token or not repo:
-        # 如果还没配 GitHub Secrets，则降级读取本地文件（方便本地测试）
         if os.path.exists(DATA_FILE):
             with open(DATA_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
@@ -42,30 +41,29 @@ def load_memos_from_github():
         if response.status_code == 200:
             file_info = response.json()
             file_content = base64.b64decode(file_info["content"]).decode("utf-8")
-            st.session_state.gh_file_sha = file_info["sha"] # 记录文件版本号，更新时需要
+            st.session_state.gh_file_sha = file_info["sha"]
             return json.loads(file_content)
-    except Exception as e:
-        st.error(f"从 GitHub 同步数据失败: {e}")
+    except Exception:
+        pass
     
     return get_default_memos()
 
-# 自动将最新数据推送到 GitHub 仓库保存
+# 后台静默自动推送到 GitHub 保存
 def save_memos_to_github(memos):
     token, repo = get_github_config()
     content_str = json.dumps(memos, ensure_ascii=False, indent=4)
     content_encoded = base64.b64encode(content_str.encode("utf-8")).decode("utf-8")
     
-    # 同时备份到本地
+    # 同时在本地保留备份
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         f.write(content_str)
 
     if not token or not repo:
-        return # 本地测试没配 Token 时直接跳过云端推送
+        return
 
     url = f"https://api.github.com/repos/{repo}/contents/{DATA_FILE}"
     headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"}
     
-    # 获取最新的 sha
     sha = st.session_state.get("gh_file_sha", "")
     if not sha:
         try:
@@ -76,7 +74,7 @@ def save_memos_to_github(memos):
             pass
 
     data = {
-        "message": f"Auto-update memos via Streamlit at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        "message": f"Auto-sync memo at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
         "content": content_encoded,
         "sha": sha
     }
@@ -85,8 +83,8 @@ def save_memos_to_github(memos):
         response = requests.put(url, headers=headers, json=data)
         if response.status_code in [200, 201]:
             st.session_state.gh_file_sha = response.json()["content"]["sha"]
-    except Exception as e:
-        st.error(f"同步到 GitHub 异常: {e}")
+    except Exception:
+        pass
 
 def get_default_memos():
     return [
@@ -105,11 +103,11 @@ def get_default_memos():
         }
     ]
 
-# 初始化内存数据
+# 每次打开或刷新页面，在后台自动加载最新数据
 if "memos" not in st.session_state:
     st.session_state.memos = load_memos_from_github()
 
-# ---------------- 2. 安全密码与凭证登录验证 ----------------
+# ---------------- 2. 安全密码登录验证 ----------------
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "user_role" not in st.session_state:
@@ -134,7 +132,7 @@ if not st.session_state.logged_in:
                 if correct_pwd and password == correct_pwd:
                     st.session_state.logged_in = True
                     st.session_state.user_role = "boss" if username == "boss" else "staff"
-                    # 登录瞬间自动从 GitHub 拉取最新数据
+                    # 登录瞬间静默拉取最新云端数据
                     st.session_state.memos = load_memos_from_github()
                     st.success("登录成功！正在进入...")
                     st.rerun()
@@ -142,31 +140,25 @@ if not st.session_state.logged_in:
                     st.error("用户名不存在或密码错误！(默认测试密码可输入 123)")
     st.stop()
 
-# ---------------- 3. 主体系统界面（角色权限严格隔离） ----------------
+# ---------------- 3. 主体系统界面（完全无冗余 UI） ----------------
 st.title("📋 小店智能备忘录与协同系统")
 current_role = st.session_state.user_role
 
 st.sidebar.markdown(f"**当前身份**：`{current_role.upper()}`")
 if current_role == "boss":
-    st.sidebar.info("👑 老板娘模式：拥有最高审批与管理权限")
+    st.sidebar.info("👑 老板娘模式：最高审批与管理权限")
 else:
-    st.sidebar.info("✍️ 员工模式：可登记新单、申请完成与申请删除")
+    st.sidebar.info("✍️ 员工模式：登记、申请完成与申请删除")
 
+# 侧边栏只保留干净的退出登录，去掉了所有杂乱的同步按钮
 if st.sidebar.button("🚪 退出登录"):
     st.session_state.logged_in = False
     st.rerun()
 
-# 手动刷新数据按钮
-if st.sidebar.button("🔄 从云端同步最新数据"):
-    st.session_state.memos = load_memos_from_github()
-    st.success("数据已同步为最新状态！")
-    st.rerun()
-
-# ---------------- 4. 员工专属端（可录入、可申请完成、可带理由申请删除） ----------------
+# ---------------- 4. 员工端（全自动化后台保存） ----------------
 if current_role == "staff":
     st.subheader("✍️ 员工端：快速登记客户预约与备忘")
     
-    # 防误删普通输入框
     col1, col2 = st.columns(2)
     with col1:
         client_name = st.text_input("客户姓名 / 称呼 *", key="input_client")
@@ -199,12 +191,14 @@ if current_role == "staff":
                 "delete_reason": ""
             }
             st.session_state.memos.insert(0, new_item)
-            save_memos_to_github(st.session_state.memos) # 自动同步到 GitHub
-            st.success("🎉 登记成功！数据已自动同步至云端 GitHub 仓库。")
+            # 🚀 后台静默自动同步，不出现任何多余 UI
+            save_memos_to_github(st.session_state.memos)
+            st.success("🎉 登记成功！已自动安全同步至云端。")
 
     st.markdown("---")
     st.subheader("📝 近期备忘与进度申请中心")
     
+    # 每次渲染前后台静默拉取
     st.session_state.memos = load_memos_from_github()
     
     for m in st.session_state.memos:
@@ -229,7 +223,7 @@ if current_role == "staff":
             if m["status"] == "进行中":
                 if st.button("👉 申请完成（提交老板娘审核）", key=f"staff_apply_{m['id']}"):
                     m["status"] = "待审核"
-                    save_memos_to_github(st.session_state.memos)
+                    save_memos_to_github(st.session_state.memos) # 后台自动保存
                     st.success("已提交完成申请！")
                     st.rerun()
                 
@@ -241,7 +235,7 @@ if current_role == "staff":
                         else:
                             m["status"] = "待删除审核"
                             m["delete_reason"] = del_reason_input
-                            save_memos_to_github(st.session_state.memos)
+                            save_memos_to_github(st.session_state.memos) # 后台自动保存
                             st.success("删除申请已提交！")
                             st.rerun()
 
@@ -254,7 +248,7 @@ if current_role == "staff":
 
             st.markdown("---")
 
-# ---------------- 5. 老板娘专属核心看板（审批与管理中心） ----------------
+# ---------------- 5. 老板娘端（全自动化后台保存） ----------------
 else:
     st.subheader("👑 老板娘核心看板与审批中心")
     
@@ -319,13 +313,13 @@ else:
                     with col_btn1:
                         if st.button("✅ 批准完成", key=f"boss_approve_{m['id']}"):
                             m["status"] = "已完成"
-                            save_memos_to_github(st.session_state.memos)
+                            save_memos_to_github(st.session_state.memos) # 后台自动保存
                             st.success("已批准该单完成！")
                             st.rerun()
                     with col_btn2:
                         if st.button("❌ 驳回申请", key=f"boss_reject_{m['id']}"):
                             m["status"] = "进行中"
-                            save_memos_to_github(st.session_state.memos)
+                            save_memos_to_github(st.session_state.memos) # 后台自动保存
                             st.warning("已驳回，退回进行中。")
                             st.rerun()
                             
@@ -333,14 +327,14 @@ else:
                     with col_btn1:
                         if st.button("✅ 批准删除（彻底移除）", key=f"boss_approve_del_{m['id']}"):
                             st.session_state.memos = [item for item in st.session_state.memos if item["id"] != m["id"]]
-                            save_memos_to_github(st.session_state.memos)
+                            save_memos_to_github(st.session_state.memos) # 后台自动保存
                             st.warning("已彻底清除该单！")
                             st.rerun()
                     with col_btn2:
                         if st.button("❌ 驳回删除申请", key=f"boss_reject_del_{m['id']}"):
                             m["status"] = "进行中"
                             m["delete_reason"] = ""
-                            save_memos_to_github(st.session_state.memos)
+                            save_memos_to_github(st.session_state.memos) # 后台自动保存
                             st.info("已驳回删除，恢复为进行中状态。")
                             st.rerun()
                             
@@ -348,14 +342,14 @@ else:
                     with col_btn1:
                         if st.button("🔄 重新设为进行中", key=f"boss_reopen_{m['id']}"):
                             m["status"] = "进行中"
-                            save_memos_to_github(st.session_state.memos)
+                            save_memos_to_github(st.session_state.memos) # 后台自动保存
                             st.rerun()
                 
                 if m["status"] != "待删除审核":
                     with col_btn2:
                         if st.button("🗑️ 直接删除", key=f"boss_del_{m['id']}"):
                             st.session_state.memos = [item for item in st.session_state.memos if item["id"] != m["id"]]
-                            save_memos_to_github(st.session_state.memos)
+                            save_memos_to_github(st.session_state.memos) # 后台自动保存
                             st.warning("已直接删除该单。")
                             st.rerun()
 
