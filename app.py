@@ -124,13 +124,40 @@ if not st.session_state.logged_in:
                     st.error("用户名不存在或密码错误！(默认测试密码可输入 123)")
     st.stop()
 
-# ---------------- 3. 主体系统界面与侧边栏（左上角加入实时时间显示） ----------------
+# ---------------- 3. 主体系统界面与侧边栏（嵌入左上角实时动态走字时钟） ----------------
 st.title("📋 小店智能备忘录与协同系统")
 current_role = st.session_state.user_role
 
-# 🌟 核心：在侧边栏最上方加入当前实时时间显示
-current_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-st.sidebar.markdown(f"🕒 **当前时间**：`{current_time_str}`")
+# 🌟 核心：在侧边栏最上方嵌入一个每秒自动跳动的实时电子钟 HTML 组件
+live_clock_html = """
+<div style="font-size: 15px; font-weight: bold; color: #31333F; background-color: #F0F2F6; padding: 10px; border-radius: 8px; margin-bottom: 15px;">
+    🕒 实时时钟：<span id="live-clock">加载中...</span>
+</div>
+
+<script>
+function updateClock() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth + 1).padStart(2, '0');
+    // 修正月获取方式
+    const realMonth = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    
+    const timeString = `${year}-${realMonth}-${day} ${hours}:${minutes}:${seconds}`;
+    const clockElement = document.getElementById('live-clock');
+    if (clockElement) {
+        clockElement.innerText = timeString;
+    }
+}
+setInterval(updateClock, 1000);
+updateClock();
+</script>
+"""
+st.sidebar.components.v1.html(live_clock_html, height=65)
+
 st.sidebar.markdown(f"👤 **当前身份**：`{current_role.upper()}`")
 
 if current_role == "boss":
@@ -210,7 +237,7 @@ def sort_memos(memos, sort_option):
         return sorted(memos, key=lambda x: x["date"], reverse=True)
     return memos
 
-# ---------------- 4. 员工端（看得到单子和报价，但绝对看不到总营收统计） ----------------
+# ---------------- 4. 员工端 ----------------
 if current_role == "staff":
     render_memo_input_form("staff")
 
@@ -242,7 +269,6 @@ if current_role == "staff":
         urgent_badge = "🔥 **[加急]**" if m["is_urgent"] else ""
         
         with st.container():
-            # 员工端展示单子和各自报价（但不展示总营收面板）
             st.markdown(f"""
             ### {urgent_badge} {m['client_name']} —— {m['service']} (报价: ￥{m['fee']})
             - **📞 电话**：`{m['phone'] or '未填'}` | **📍 地址**：{m['address'] or '未填'} | **📅 日期**：{m['date']}
@@ -280,7 +306,7 @@ if current_role == "staff":
 
             st.markdown("---")
 
-# ---------------- 5. 老板娘端（拥有总营收统计看板、录单与完全审批权限） ----------------
+# ---------------- 5. 老板娘端 ----------------
 else:
     st.subheader("👑 老板娘核心看板与审批中心")
     
@@ -289,8 +315,6 @@ else:
     total_count = len(memos)
     urgent_count = sum(1 for m in memos if m["is_urgent"] and m["status"] not in ["已完成", "待删除审核"])
     pending_approval_count = sum(1 for m in memos if m["status"] in ["待审核", "待删除审核"])
-    
-    # 🌟 核心：只有老板娘能看到总营收统计
     total_revenue = sum(m["fee"] for m in memos if m["status"] not in ["已完成", "待删除审核"])
     
     col_a, col_b, col_c, col_d = st.columns(4)
