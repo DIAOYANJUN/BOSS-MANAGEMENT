@@ -124,13 +124,13 @@ if not st.session_state.logged_in:
                     st.error("用户名不存在或密码错误！(默认测试密码可输入 123)")
     st.stop()
 
-# ---------------- 3. 主体系统界面与侧边栏（完美直接获取设备时间的 JS 时钟） ----------------
+# ---------------- 3. 主体系统界面与侧边栏（采用标准组件渲染时钟） ----------------
 st.title("📋 小店智能备忘录与协同系统")
 current_role = st.session_state.user_role
 
-# 🌟 利用标准的 iframe 安全沙箱直接在侧边栏渲染动态设备时间
+# 🌟 修正：直接使用 st.components.v1.html 放入侧边栏
 clock_html = """
-<div style="font-family: sans-serif; font-size: 14px; font-weight: bold; color: #31333F; background: #f0f2f6; padding: 10px; border-radius: 6px; text-align: center;">
+<div style="font-family: sans-serif; font-size: 13px; font-weight: bold; color: #31333F; background: #f0f2f6; padding: 8px; border-radius: 6px; text-align: center;">
     🕒 <span id="clock">获取时间中...</span>
 </div>
 <script>
@@ -142,34 +142,35 @@ function updateClock() {
     const h = String(now.getHours()).padStart(2, '0');
     const min = String(now.getMinutes()).padStart(2, '0');
     const s = String(now.getSeconds()).padStart(2, '0');
-    document.getElementById('clock').innerText = `${y}-${m}-${d} ${h}:${min}:${s}`;
+    const el = document.getElementById('clock');
+    if (el) el.innerText = `${y}-${m}-${d} ${h}:${min}:${s}`;
 }
 setInterval(updateClock, 1000);
 updateClock();
 </script>
 """
-st.sidebar.components.v1.html(clock_html, height=50)
+with st.sidebar:
+    st.components.v1.html(clock_html, height=45)
+    st.markdown(f"👤 **当前身份**：`{current_role.upper()}`")
 
-st.sidebar.markdown(f"👤 **当前身份**：`{current_role.upper()}`")
+    if current_role == "boss":
+        st.info("👑 老板娘模式：全面看板、审批与管理权限")
+    else:
+        st.info("✍️ 员工模式：登记预约与进度协同")
 
-if current_role == "boss":
-    st.sidebar.info("👑 老板娘模式：全面看板、审批与管理权限")
-else:
-    st.sidebar.info("✍️ 员工模式：登记预约与进度协同")
+    if os.path.exists("lulu.jpeg"):
+        st.image("lulu.jpeg", use_container_width=True)
 
-if os.path.exists("lulu.jpeg"):
-    st.sidebar.image("lulu.jpeg", use_container_width=True)
+    st.markdown("---")
 
-st.sidebar.markdown("---")
+    if st.button("🔄 刷新并核对状态", type="primary", use_container_width=True):
+        st.toast("已成功重新加载最新状态！", icon="✅")
+        st.rerun()
 
-if st.sidebar.button("🔄 刷新并核对备忘状态", type="primary", use_container_width=True):
-    st.toast("已成功重新加载最新状态！", icon="✅")
-    st.rerun()
-
-if st.sidebar.button("🚪 退出登录", use_container_width=True):
-    st.query_params.clear()
-    st.session_state.logged_in = False
-    st.rerun()
+    if st.button("🚪 退出登录", use_container_width=True):
+        st.query_params.clear()
+        st.session_state.logged_in = False
+        st.rerun()
 
 # ---------------- 公共函数：渲染可清空的录入表单 ----------------
 def render_memo_input_form(form_key_suffix=""):
