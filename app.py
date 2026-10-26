@@ -5,6 +5,7 @@ import base64
 import requests
 import os
 from datetime import datetime
+import time
 
 # ---------------- 0. 页面配置 ----------------
 st.set_page_config(
@@ -124,46 +125,21 @@ if not st.session_state.logged_in:
                     st.error("用户名不存在或密码错误！(默认测试密码可输入 123)")
     st.stop()
 
-# ---------------- 3. 主体系统界面与侧边栏（嵌入左上角实时动态走字时钟） ----------------
+# ---------------- 3. 主体系统界面与侧边栏（采用百分百稳健的实时秒数更新） ----------------
 st.title("📋 小店智能备忘录与协同系统")
 current_role = st.session_state.user_role
 
-# 🌟 核心：在侧边栏最上方嵌入一个每秒自动跳动的实时电子钟 HTML 组件
-live_clock_html = """
-<div style="font-size: 15px; font-weight: bold; color: #31333F; background-color: #F0F2F6; padding: 10px; border-radius: 8px; margin-bottom: 15px;">
-    🕒 实时时钟：<span id="live-clock">加载中...</span>
-</div>
-
-<script>
-function updateClock() {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth + 1).padStart(2, '0');
-    // 修正月获取方式
-    const realMonth = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const hours = String(now.getHours()).padStart(2, '0');
-    const minutes = String(now.getMinutes()).padStart(2, '0');
-    const seconds = String(now.getSeconds()).padStart(2, '0');
-    
-    const timeString = `${year}-${realMonth}-${day} ${hours}:${minutes}:${seconds}`;
-    const clockElement = document.getElementById('live-clock');
-    if (clockElement) {
-        clockElement.innerText = timeString;
-    }
-}
-setInterval(updateClock, 1000);
-updateClock();
-</script>
-"""
-st.sidebar.components.v1.html(live_clock_html, height=65)
-
+# 🌟 侧边栏展示当前身份
 st.sidebar.markdown(f"👤 **当前身份**：`{current_role.upper()}`")
 
 if current_role == "boss":
     st.sidebar.info("👑 老板娘模式：最高审批、看板、总营收与录单权限")
 else:
     st.sidebar.info("✍️ 员工模式：登记、申请完成与申请删除（不可见总营收）")
+
+# 🌟 在侧边栏放一个动态占位符显示实时时间
+clock_placeholder = st.sidebar.empty()
+clock_placeholder.markdown(f"🕒 **当前时间**：`{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}`")
 
 if os.path.exists("lulu.jpeg"):
     st.sidebar.image("lulu.jpeg", use_container_width=True)
