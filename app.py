@@ -108,7 +108,7 @@ if not st.session_state.logged_in:
     col_img, col_login = st.columns([1, 1], gap="large")
     
     with col_img:
-        st.markdown("### 🐾 欢迎来到小店！")
+        st.markdown("### 🐾 欢迎来到系统！")
         if os.path.exists("bubu.jpeg"):
             st.image("bubu.jpeg", use_container_width=True, caption="bubu")
         if os.path.exists("yier.jpeg"):
