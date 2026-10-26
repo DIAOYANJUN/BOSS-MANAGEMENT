@@ -124,15 +124,19 @@ if not st.session_state.logged_in:
                     st.error("用户名不存在或密码错误！(默认测试密码可输入 123)")
     st.stop()
 
-# ---------------- 3. 主体系统界面与侧边栏 ----------------
+# ---------------- 3. 主体系统界面与侧边栏（左上角加入实时时间显示） ----------------
 st.title("📋 小店智能备忘录与协同系统")
 current_role = st.session_state.user_role
 
-st.sidebar.markdown(f"**当前身份**：`{current_role.upper()}`")
+# 🌟 核心：在侧边栏最上方加入当前实时时间显示
+current_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+st.sidebar.markdown(f"🕒 **当前时间**：`{current_time_str}`")
+st.sidebar.markdown(f"👤 **当前身份**：`{current_role.upper()}`")
+
 if current_role == "boss":
-    st.sidebar.info("👑 老板娘模式：最高审批、看板与录单权限")
+    st.sidebar.info("👑 老板娘模式：最高审批、看板、总营收与录单权限")
 else:
-    st.sidebar.info("✍️ 员工模式：登记、申请完成与申请删除")
+    st.sidebar.info("✍️ 员工模式：登记、申请完成与申请删除（不可见总营收）")
 
 if os.path.exists("lulu.jpeg"):
     st.sidebar.image("lulu.jpeg", use_container_width=True)
@@ -150,7 +154,7 @@ if st.sidebar.button("🚪 退出登录", use_container_width=True):
 
 # ---------------- 公共函数：渲染可清空的录入表单 ----------------
 def render_memo_input_form(form_key_suffix=""):
-    st.subheader("✍️ 快速登记客户预约与备忘")
+    st.subheader("✍️ 快速登记客户预约与报价")
     
     with st.form(f"memo_input_form_{form_key_suffix}", clear_on_submit=True):
         col1, col2 = st.columns(2)
@@ -160,7 +164,7 @@ def render_memo_input_form(form_key_suffix=""):
             address = st.text_input("上门服务地址")
         with col2:
             service = st.text_input("服务项目 *")
-            fee = st.number_input("预计费用 (￥)", min_value=0.0, value=0.0, step=10.0)
+            fee = st.number_input("服务报价 (￥)", min_value=0.0, value=0.0, step=10.0)
             date = st.date_input("预约日期", value=datetime.now())
         
         desc = st.text_area("详细备注")
@@ -187,11 +191,9 @@ def render_memo_input_form(form_key_suffix=""):
                 }
                 memos.insert(0, new_item)
                 save_memos(memos)
-                # 使用 session_state 传递成功提示，确保表单清空后也能稳稳弹出窗口
                 st.session_state["success_msg"] = f"🎉 成功保存【{client_name}】的预约单！输入已清空。"
                 st.rerun()
 
-    # 在表单外部安全展示成功提示窗口
     if "success_msg" in st.session_state and st.session_state["success_msg"]:
         st.success(st.session_state["success_msg"])
         del st.session_state["success_msg"]
@@ -208,7 +210,7 @@ def sort_memos(memos, sort_option):
         return sorted(memos, key=lambda x: x["date"], reverse=True)
     return memos
 
-# ---------------- 4. 员工端 ----------------
+# ---------------- 4. 员工端（看得到单子和报价，但绝对看不到总营收统计） ----------------
 if current_role == "staff":
     render_memo_input_form("staff")
 
@@ -240,8 +242,9 @@ if current_role == "staff":
         urgent_badge = "🔥 **[加急]**" if m["is_urgent"] else ""
         
         with st.container():
+            # 员工端展示单子和各自报价（但不展示总营收面板）
             st.markdown(f"""
-            ### {urgent_badge} {m['client_name']} —— {m['service']} (￥{m['fee']})
+            ### {urgent_badge} {m['client_name']} —— {m['service']} (报价: ￥{m['fee']})
             - **📞 电话**：`{m['phone'] or '未填'}` | **📍 地址**：{m['address'] or '未填'} | **📅 日期**：{m['date']}
             - **📌 当前状态**：`{status_badge}` | **📝 备注**：{m['memo_desc'] or '无'}
             """)
@@ -253,7 +256,6 @@ if current_role == "staff":
                     st.success("已提交完成申请！")
                     st.rerun()
                 
-                # 🌟 员工申请删除：增加确认折叠与勾选确认弹窗
                 with st.expander("🛠️ 登记错误？申请删除此单"):
                     del_reason_input = st.text_input("请填写申请删除的理由 *", key=f"reason_input_{m['id']}", placeholder="例如：客户取消预约...")
                     confirm_del = st.checkbox("⚠️ 我确认要向老板娘提交该单的删除申请", key=f"confirm_del_staff_{m['id']}")
@@ -278,7 +280,7 @@ if current_role == "staff":
 
             st.markdown("---")
 
-# ---------------- 5. 老板娘端 ----------------
+# ---------------- 5. 老板娘端（拥有总营收统计看板、录单与完全审批权限） ----------------
 else:
     st.subheader("👑 老板娘核心看板与审批中心")
     
@@ -287,13 +289,15 @@ else:
     total_count = len(memos)
     urgent_count = sum(1 for m in memos if m["is_urgent"] and m["status"] not in ["已完成", "待删除审核"])
     pending_approval_count = sum(1 for m in memos if m["status"] in ["待审核", "待删除审核"])
+    
+    # 🌟 核心：只有老板娘能看到总营收统计
     total_revenue = sum(m["fee"] for m in memos if m["status"] not in ["已完成", "待删除审核"])
     
     col_a, col_b, col_c, col_d = st.columns(4)
     col_a.metric("总单数", f"{total_count} 单")
     col_b.metric("🔥 紧急加急", f"{urgent_count} 单")
     col_c.metric("⏳ 待审批事项", f"{pending_approval_count} 单")
-    col_d.metric("进行中预计营收", f"￥{total_revenue:.2f}")
+    col_d.metric("💰 进行中总营收", f"￥{total_revenue:.2f}")
     
     st.markdown("---")
     
@@ -320,7 +324,6 @@ else:
     elif filter_option == "已完成单子":
         filtered_memos = [m for m in memos if m["status"] == "已完成"]
     
-    # 执行排序
     filtered_memos = sort_memos(filtered_memos, sort_option)
     
     st.markdown(f"**当前显示记录数**：{len(filtered_memos)} 条")
@@ -390,7 +393,6 @@ else:
                             save_memos(memos)
                             st.rerun()
                 
-                # 🌟 老板娘端：常规直接删除按钮也加上了安全二次确认抽屉（防止误触）
                 if m["status"] != "待删除审核":
                     with col_btn2:
                         with st.popover("🗑️ 删除此单"):
