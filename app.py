@@ -14,9 +14,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# 初始化安全的 Cookie 控制器
 cookie_controller = CookieController()
-
 DATA_FILE = "memos.json"
 
 # ---------------- 1. 核心数据读写与同步 ----------------
@@ -86,7 +84,6 @@ if "logged_in" not in st.session_state:
 if "user_role" not in st.session_state:
     st.session_state.user_role = "staff"
 
-# 从浏览器的加密 Cookie 中读取登录状态
 cookie_logged = cookie_controller.get("boss_memo_logged")
 cookie_role = cookie_controller.get("boss_memo_role")
 
@@ -122,7 +119,6 @@ if not st.session_state.logged_in:
 
                 if correct_pwd and password == correct_pwd:
                     role_to_set = "boss" if username == "boss" else "staff"
-                    # 将登录状态存入加密 Cookie（有效期 7 天）
                     cookie_controller.set("boss_memo_logged", "true", max_age=60*60*24*7)
                     cookie_controller.set("boss_memo_role", role_to_set, max_age=60*60*24*7)
                     
@@ -138,7 +134,6 @@ if not st.session_state.logged_in:
 st.title("📋 小店智能备忘录与协同系统")
 current_role = st.session_state.user_role
 
-# 动态设备时钟
 clock_html = """
 <div style="font-family: sans-serif; font-size: 13px; font-weight: bold; color: #31333F; background: #f0f2f6; padding: 8px; border-radius: 6px; text-align: center;">
     🕒 <span id="clock">获取时间中...</span>
@@ -178,7 +173,6 @@ with st.sidebar:
         st.rerun()
 
     if st.button("🚪 退出登录", use_container_width=True):
-        # 清除浏览器的加密 Cookie
         cookie_controller.remove("boss_memo_logged")
         cookie_controller.remove("boss_memo_role")
         st.session_state.logged_in = False
@@ -230,7 +224,7 @@ def render_memo_input_form(form_key_suffix=""):
         st.success(st.session_state["success_msg"])
         del st.session_state["success_msg"]
 
-# ---------------- 排序助手函数 ----------------
+# ---------------- 排序助手函数（增加未收款专属智能排序） ----------------
 def sort_memos(memos, sort_option):
     if sort_option == "金额：从高到低 ⬇️":
         return sorted(memos, key=lambda x: x["fee"], reverse=True)
@@ -240,9 +234,15 @@ def sort_memos(memos, sort_option):
         return sorted(memos, key=lambda x: x["date"], reverse=False)
     elif sort_option == "日期：由迟到早（最晚的在前） 📅":
         return sorted(memos, key=lambda x: x["date"], reverse=True)
+    elif sort_option == "未收款：由时间越久没收款开始排序 ⏳":
+        # 未收款项置顶，且按照日期从早到迟（欠款时间越久越靠前）排序
+        def unpaid_sort_key(x):
+            is_unpaid = 0 if x["status"] in ["申请完成（未收款）", "已完成（未收款）"] else 1
+            return (is_unpaid, x["date"])
+        return sorted(memos, key=unpaid_sort_key, reverse=False)
     return memos
 
-# ---------------- 4. 顶部快捷操作栏（增加备忘录 & 手机号搜索） ----------------
+# ---------------- 4. 顶部快捷操作栏 ----------------
 st.markdown("---")
 top_col1, top_col2, top_col3 = st.columns([1, 1, 2])
 
@@ -284,8 +284,12 @@ if current_role == "staff":
     for m in memos:
         if m["status"] == "已完成":
             status_badge = "✨ 已完成"
+        elif m["status"] == "已完成（未收款）":
+            status_badge = "⚠️ 已完成（未收款/待催收）"
         elif m["status"] == "待审核":
-            status_badge = "⏳ 待老板娘审核(完成)"
+            status_badge = "⏳ 待老板娘审核(已收款)"
+        elif m["status"] == "申请完成（未收款）":
+            status_badge = "⏳ 待老板娘审核(未收款)"
         elif m["status"] == "待删除审核":
             status_badge = "🗑️ 待老板娘审核(删除)"
         else:
@@ -301,11 +305,20 @@ if current_role == "staff":
             """)
             
             if m["status"] == "进行中":
-                if st.button("👉 申请完成（提交老板娘审核）", key=f"staff_apply_{m['id']}"):
-                    m["status"] = "待审核"
-                    save_memos(memos)
-                    st.success("已提交完成申请！")
-                    st.rerun()
+                # 🌟 员工端支持两种完成申请：已收款 vs 未收款
+                col_btn_s1, col_btn_s2 = st.columns(2)
+                with col_btn_s1:
+                    if st.button("👉 申请完成（已收款）", key=f"staff_apply_{m['id']}"):
+                        m["status"] = "待审核"
+                        save_memos(memos)
+                        st.success("已提交完成申请（已收款）！")
+                        st.rerun()
+                with col_btn_s2:
+                    if st.button("👉 申请完成（未收款）", key=f"staff_apply_unpaid_{m['id']}"):
+                        m["status"] = "申请完成（未收款）"
+                        save_memos(memos)
+                        st.success("已提交完成申请（未收款）！")
+                        st.rerun()
                 
                 with st.expander("🛠️ 登记错误？申请删除此单"):
                     del_reason_input = st.text_input("请填写申请删除的理由 *", key=f"reason_input_{m['id']}", placeholder="例如：客户取消预约...")
@@ -322,10 +335,10 @@ if current_role == "staff":
                             st.success("删除申请已提交！")
                             st.rerun()
 
-            elif m["status"] == "待审核":
+            elif m["status"] in ["待审核", "申请完成（未收款）"]:
                 st.info("📌 已提交完成申请，等待老板娘审批确认中...")
-            elif m["status"] == "待删除审核":
-                st.warning(f"⚠️ 已提交删除申请，删除理由：【{m.get('delete_reason', '无')}】等待老板娘审批...")
+            elif m["status"] == "已完成（未收款）":
+                st.warning("⚠️ 此单已由老板娘标记为完成，但目前【尚未收到款项】，等待催收。")
             elif m["status"] == "已完成":
                 st.success("✨ 此单已由老板娘审核通过并归档。")
 
@@ -339,7 +352,8 @@ else:
     
     total_count = len(memos)
     urgent_count = sum(1 for m in memos if m["is_urgent"] and m["status"] not in ["已完成", "待删除审核"])
-    pending_approval_count = sum(1 for m in memos if m["status"] in ["待审核", "待删除审核"])
+    pending_approval_count = sum(1 for m in memos if m["status"] in ["待审核", "申请完成（未收款）", "待删除审核"])
+    unpaid_count = sum(1 for m in memos if m["status"] == "已完成（未收款）")
     total_revenue = sum(m["fee"] for m in memos if m["status"] not in ["已完成", "待删除审核"])
     
     col_a, col_b, col_c, col_d = st.columns(4)
@@ -356,17 +370,17 @@ else:
     with col_sort:
         sort_option = st.selectbox(
             "🔀 列表排序方式",
-            ["默认排序", "日期：由早到迟（最早的在前） ⏰", "日期：由迟到早（最晚的在前） 📅", "金额：从高到低 ⬇️", "金额：从低到高 ⬆️"],
+            ["默认排序", "未收款：由时间越久没收款开始排序 ⏳", "日期：由早到迟（最早的在前） ⏰", "日期：由迟到早（最晚的在前） 📅", "金额：从高到低 ⬇️", "金额：从低到高 ⬆️"],
             key="boss_sort"
         )
     
     filtered_memos = memos
     if filter_option == "⏳ 待审批的单子":
-        filtered_memos = [m for m in memos if m["status"] in ["待审核", "待删除审核"]]
+        filtered_memos = [m for m in memos if m["status"] in ["待审核", "申请完成（未收款）", "待删除审核"]]
     elif filter_option == "🔥 仅看加急件":
         filtered_memos = [m for m in memos if m["is_urgent"]]
     elif filter_option == "已完成单子":
-        filtered_memos = [m for m in memos if m["status"] == "已完成"]
+        filtered_memos = [m for m in memos if m["status"] in ["已完成", "已完成（未收款）"]]
     
     if show_search and search_phone_query.strip():
         filtered_memos = [m for m in filtered_memos if search_phone_query.strip() in m.get("phone", "")]
@@ -382,8 +396,12 @@ else:
         for m in filtered_memos:
             if m["status"] == "已完成":
                 status_badge = "✨ 已完成"
+            elif m["status"] == "已完成（未收款）":
+                status_badge = "⚠️ 已完成（未收款 / 待催收）"
             elif m["status"] == "待审核":
-                status_badge = "⏳ 待老板娘审核(完成)"
+                status_badge = "⏳ 待老板娘审核(已收款)"
+            elif m["status"] == "申请完成（未收款）":
+                status_badge = "⏳ 待老板娘审核(未收款)"
             elif m["status"] == "待删除审核":
                 status_badge = "🗑️ ⚠️ 员工申请删除此单"
             else:
@@ -406,7 +424,7 @@ else:
                 
                 if m["status"] == "待审核":
                     with col_btn1:
-                        if st.button("✅ 批准完成", key=f"boss_approve_{m['id']}"):
+                        if st.button("✅ 批准完成（已收款）", key=f"boss_approve_{m['id']}"):
                             m["status"] = "已完成"
                             save_memos(memos)
                             st.success("已批准该单完成！")
@@ -418,6 +436,28 @@ else:
                             st.warning("已驳回，退回进行中。")
                             st.rerun()
                             
+                elif m["status"] == "申请完成（未收款）":
+                    with col_btn1:
+                        if st.button("⚠️ 批准完成（记为未收款）", key=f"boss_approve_unpaid_{m['id']}"):
+                            m["status"] = "已完成（未收款）"
+                            save_memos(memos)
+                            st.warning("已批准，当前状态为【未收款/待催收】！")
+                            st.rerun()
+                    with col_btn2:
+                        if st.button("❌ 驳回申请", key=f"boss_reject_unpaid_{m['id']}"):
+                            m["status"] = "进行中"
+                            save_memos(memos)
+                            st.warning("已驳回，退回进行中。")
+                            st.rerun()
+
+                elif m["status"] == "已完成（未收款）":
+                    with col_btn1:
+                        if st.button("💰 确认已收到款项", key=f"boss_collect_{m['id']}"):
+                            m["status"] = "已完成"
+                            save_memos(memos)
+                            st.success("太棒了！已确认收到款项并正式归档。")
+                            st.rerun()
+
                 elif m["status"] == "待删除审核":
                     with col_btn1:
                         if st.button("✅ 批准删除（彻底移除）", key=f"boss_approve_del_{m['id']}"):
@@ -433,12 +473,13 @@ else:
                             st.info("已驳回删除，恢复为进行中状态。")
                             st.rerun()
                             
-                elif m["status"] == "已完成":
-                    with col_btn1:
-                        if st.button("🔄 重新设为进行中", key=f"boss_reopen_{m['id']}"):
-                            m["status"] = "进行中"
-                            save_memos(memos)
-                            st.rerun()
+                elif m["status"] in ["已完成", "已完成（未收款）"]:
+                    if m["status"] == "已完成":
+                        with col_btn1:
+                            if st.button("🔄 重新设为进行中", key=f"boss_reopen_{m['id']}"):
+                                m["status"] = "进行中"
+                                save_memos(memos)
+                                st.rerun()
                 
                 if m["status"] != "待删除审核":
                     with col_btn2:
