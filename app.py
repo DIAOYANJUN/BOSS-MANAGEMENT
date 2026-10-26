@@ -9,7 +9,7 @@ from streamlit_cookies_controller import CookieController
 
 # ---------------- 0. 页面配置与 CSS 隐藏官方杂项 ----------------
 st.set_page_config(
-    page_title="小店智能备忘录与协同系统",
+    page_title="智能备忘录与协同系统",
     page_icon="📋",
     layout="wide"
 )
