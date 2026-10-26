@@ -91,7 +91,6 @@ if not st.session_state.logged_in:
     st.title("🔐 小店智能备忘录系统登录")
     st.markdown("---")
     
-    # 🌟 左右分栏：左边放图片装饰，右边放登录表单，互不干扰！
     col_img, col_login = st.columns([1, 1], gap="large")
     
     with col_img:
@@ -131,11 +130,10 @@ current_role = st.session_state.user_role
 
 st.sidebar.markdown(f"**当前身份**：`{current_role.upper()}`")
 if current_role == "boss":
-    st.sidebar.info("👑 老板娘模式：最高审批与管理权限")
+    st.sidebar.info("👑 老板娘模式：最高审批、看板与录单权限")
 else:
     st.sidebar.info("✍️ 员工模式：登记、申请完成与申请删除")
 
-# 🌟 侧边栏放 lulu.jpeg
 if os.path.exists("lulu.jpeg"):
     st.sidebar.image("lulu.jpeg", use_container_width=True)
 
@@ -150,10 +148,9 @@ if st.sidebar.button("🚪 退出登录", use_container_width=True):
     st.session_state.logged_in = False
     st.rerun()
 
-# ---------------- 4. 员工端 ----------------
-if current_role == "staff":
-    st.subheader("✍️ 员工端：快速登记客户预约与备忘")
-    
+# ---------------- 公共函数：渲染录入表单（员工和老板娘共用） ----------------
+def render_memo_input_form():
+    st.subheader("✍️ 快速登记客户预约与备忘")
     col1, col2 = st.columns(2)
     with col1:
         client_name = st.text_input("客户姓名 / 称呼 *", key="input_client")
@@ -170,7 +167,7 @@ if current_role == "staff":
     submitted = st.button("✅ 提交并保存备忘", type="primary")
     if submitted:
         if not client_name or not service:
-            st.error("⚠️ 录入失败：请完整填写【客户姓名】和【服务项目】！（输入内容已完整保留）")
+            st.error("⚠️ 录入失败：请完整填写【客户姓名】和【服务项目】！")
         else:
             memos = load_memos()
             new_item = {
@@ -190,6 +187,10 @@ if current_role == "staff":
             save_memos(memos)
             st.success("🎉 登记成功！")
             st.rerun()
+
+# ---------------- 4. 员工端 ----------------
+if current_role == "staff":
+    render_memo_input_form()
 
     st.markdown("---")
     st.subheader("📝 近期备忘与进度申请中心")
@@ -259,6 +260,12 @@ else:
     col_b.metric("🔥 紧急加急", f"{urgent_count} 单")
     col_c.metric("⏳ 待审批事项", f"{pending_approval_count} 单")
     col_d.metric("进行中预计营收", f"￥{total_revenue:.2f}")
+    
+    st.markdown("---")
+    
+    # 🌟 增加折叠菜单：老板娘随时可以展开/收起“快速录单”功能
+    with st.expander("➕ 紧急情况：点击这里展开【快速录入新单】"):
+        render_memo_input_form()
     
     st.markdown("---")
     
