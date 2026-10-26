@@ -187,8 +187,14 @@ def render_memo_input_form(form_key_suffix=""):
                 }
                 memos.insert(0, new_item)
                 save_memos(memos)
-                st.success("🎉 保存成功！内容已自动清空，可继续录入下一单。")
+                # 使用 session_state 传递成功提示，确保表单清空后也能稳稳弹出窗口
+                st.session_state["success_msg"] = f"🎉 成功保存【{client_name}】的预约单！输入已清空。"
                 st.rerun()
+
+    # 在表单外部安全展示成功提示窗口
+    if "success_msg" in st.session_state and st.session_state["success_msg"]:
+        st.success(st.session_state["success_msg"])
+        del st.session_state["success_msg"]
 
 # ---------------- 排序助手函数 ----------------
 def sort_memos(memos, sort_option):
@@ -247,11 +253,15 @@ if current_role == "staff":
                     st.success("已提交完成申请！")
                     st.rerun()
                 
+                # 🌟 员工申请删除：增加确认折叠与勾选确认弹窗
                 with st.expander("🛠️ 登记错误？申请删除此单"):
                     del_reason_input = st.text_input("请填写申请删除的理由 *", key=f"reason_input_{m['id']}", placeholder="例如：客户取消预约...")
+                    confirm_del = st.checkbox("⚠️ 我确认要向老板娘提交该单的删除申请", key=f"confirm_del_staff_{m['id']}")
                     if st.button("📤 提交删除申请给老板娘", key=f"staff_del_req_{m['id']}"):
                         if not del_reason_input.strip():
                             st.warning("请先填写删除理由！")
+                        elif not confirm_del:
+                            st.warning("⚠️ 请先勾选上方的“确认提交删除申请”复选框！")
                         else:
                             m["status"] = "待删除审核"
                             m["delete_reason"] = del_reason_input
@@ -380,12 +390,19 @@ else:
                             save_memos(memos)
                             st.rerun()
                 
+                # 🌟 老板娘端：常规直接删除按钮也加上了安全二次确认抽屉（防止误触）
                 if m["status"] != "待删除审核":
                     with col_btn2:
-                        if st.button("🗑️ 直接删除", key=f"boss_del_{m['id']}"):
-                            memos = [item for item in memos if item["id"] != m["id"]]
-                            save_memos(memos)
-                            st.warning("已直接删除该单。")
-                            st.rerun()
+                        with st.popover("🗑️ 删除此单"):
+                            st.error("⚠️ 警告：此操作将永久抹除该单记录！")
+                            confirm_boss_del = st.checkbox("确认要彻底删除吗？", key=f"chk_boss_del_{m['id']}")
+                            if st.button("确认无误，执行删除", key=f"btn_boss_del_exec_{m['id']}", type="primary"):
+                                if confirm_boss_del:
+                                    memos = [item for item in memos if item["id"] != m["id"]]
+                                    save_memos(memos)
+                                    st.warning("已直接删除该单。")
+                                    st.rerun()
+                                else:
+                                    st.warning("请先勾选上方的“确认要彻底删除吗”！")
 
                 st.markdown("---")
