@@ -76,7 +76,7 @@ def get_default_memos():
         }
     ]
 
-# ---------------- 2. 智能登录保持（左右分栏，绝不挡住输入框） ----------------
+# ---------------- 2. 智能登录保持 ----------------
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "user_role" not in st.session_state:
@@ -124,36 +124,31 @@ if not st.session_state.logged_in:
                     st.error("用户名不存在或密码错误！(默认测试密码可输入 123)")
     st.stop()
 
-# ---------------- 3. 主体系统界面与侧边栏（完美兼容的动态实时时钟） ----------------
+# ---------------- 3. 主体系统界面与侧边栏（完美直接获取设备时间的 JS 时钟） ----------------
 st.title("📋 小店智能备忘录与协同系统")
 current_role = st.session_state.user_role
 
-# 🌟 核心：用安全的 HTML+JS 动态时钟注入侧边栏顶部，秒数实时跳动
+# 🌟 利用标准的 iframe 安全沙箱直接在侧边栏渲染动态设备时间
 clock_html = """
-<div style="padding: 8px 12px; background-color: #f8f9fa; border-radius: 6px; border: 1px solid #e9ecef; margin-bottom: 15px; font-size: 14px; color: #31333F;">
-    🕒 <span id="live-clock" style="font-weight: 600; font-family: monospace;">正在加载时间...</span>
+<div style="font-family: sans-serif; font-size: 14px; font-weight: bold; color: #31333F; background: #f0f2f6; padding: 10px; border-radius: 6px; text-align: center;">
+    🕒 <span id="clock">获取时间中...</span>
 </div>
 <script>
-function startClock() {
-    function update() {
-        const d = new Date();
-        const y = d.getFullYear();
-        const m = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        const h = String(d.getHours()).padStart(2, '0');
-        const min = String(d.getMinutes()).padStart(2, '0');
-        const s = String(d.getSeconds()).padStart(2, '0');
-        const str = `${y}-${m}-${day} ${h}:${min}:${s}`;
-        const el = document.getElementById('live-clock');
-        if (el) el.innerText = str;
-    }
-    update();
-    setInterval(update, 1000);
+function updateClock() {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    const h = String(now.getHours()).padStart(2, '0');
+    const min = String(now.getMinutes()).padStart(2, '0');
+    const s = String(now.getSeconds()).padStart(2, '0');
+    document.getElementById('clock').innerText = `${y}-${m}-${d} ${h}:${min}:${s}`;
 }
-startClock();
+setInterval(updateClock, 1000);
+updateClock();
 </script>
 """
-st.sidebar.markdown(clock_html, unsafe_allow_html=True)
+st.sidebar.components.v1.html(clock_html, height=50)
 
 st.sidebar.markdown(f"👤 **当前身份**：`{current_role.upper()}`")
 
@@ -168,7 +163,7 @@ if os.path.exists("lulu.jpeg"):
 st.sidebar.markdown("---")
 
 if st.sidebar.button("🔄 刷新并核对备忘状态", type="primary", use_container_width=True):
-    st.toast("已成功重新加载最新备忘录状态！", icon="✅")
+    st.toast("已成功重新加载最新状态！", icon="✅")
     st.rerun()
 
 if st.sidebar.button("🚪 退出登录", use_container_width=True):
