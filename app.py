@@ -5,13 +5,17 @@ import base64
 import requests
 import os
 from datetime import datetime
+from streamlit_cookies_controller import CookieController
 
-# ---------------- 0. 页面配置 ----------------
+# ---------------- 0. 页面配置与 Cookie 控制器初始化 ----------------
 st.set_page_config(
     page_title="小店智能备忘录与协同系统",
     page_icon="📋",
     layout="wide"
 )
+
+# 初始化安全的 Cookie 控制器
+cookie_controller = CookieController()
 
 DATA_FILE = "memos.json"
 
@@ -76,16 +80,19 @@ def get_default_memos():
         }
     ]
 
-# ---------------- 2. 智能登录保持 ----------------
+# ---------------- 2. 安全的 Cookie 登录态维持 ----------------
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "user_role" not in st.session_state:
     st.session_state.user_role = "staff"
 
-query_params = st.query_params
-if query_params.get("logged") == "true":
+# 从浏览器的加密 Cookie 中读取登录状态
+cookie_logged = cookie_controller.get("boss_memo_logged")
+cookie_role = cookie_controller.get("boss_memo_role")
+
+if cookie_logged == "true":
     st.session_state.logged_in = True
-    st.session_state.user_role = query_params.get("role", "staff")
+    st.session_state.user_role = cookie_role if cookie_role else "staff"
 
 if not st.session_state.logged_in:
     st.title("🔐 小店智能备忘录系统登录")
@@ -114,10 +121,13 @@ if not st.session_state.logged_in:
                     correct_pwd = default_passwords.get(username)
 
                 if correct_pwd and password == correct_pwd:
+                    role_to_set = "boss" if username == "boss" else "staff"
+                    # 将登录状态存入加密 Cookie（有效期 7 天）
+                    cookie_controller.set("boss_memo_logged", "true", max_age=60*60*24*7)
+                    cookie_controller.set("boss_memo_role", role_to_set, max_age=60*60*24*7)
+                    
                     st.session_state.logged_in = True
-                    st.session_state.user_role = "boss" if username == "boss" else "staff"
-                    st.query_params["logged"] = "true"
-                    st.query_params["role"] = st.session_state.user_role
+                    st.session_state.user_role = role_to_set
                     st.success("登录成功！正在进入...")
                     st.rerun()
                 else:
@@ -128,6 +138,7 @@ if not st.session_state.logged_in:
 st.title("📋 小店智能备忘录与协同系统")
 current_role = st.session_state.user_role
 
+# 动态设备时钟
 clock_html = """
 <div style="font-family: sans-serif; font-size: 13px; font-weight: bold; color: #31333F; background: #f0f2f6; padding: 8px; border-radius: 6px; text-align: center;">
     🕒 <span id="clock">获取时间中...</span>
@@ -167,7 +178,9 @@ with st.sidebar:
         st.rerun()
 
     if st.button("🚪 退出登录", use_container_width=True):
-        st.query_params.clear()
+        # 清除浏览器的加密 Cookie
+        cookie_controller.remove("boss_memo_logged")
+        cookie_controller.remove("boss_memo_role")
         st.session_state.logged_in = False
         st.rerun()
 
@@ -229,7 +242,7 @@ def sort_memos(memos, sort_option):
         return sorted(memos, key=lambda x: x["date"], reverse=True)
     return memos
 
-# ---------------- 4. 顶部快捷操作栏（增加备忘录 & 手机号搜索备忘录） ----------------
+# ---------------- 4. 顶部快捷操作栏（增加备忘录 & 手机号搜索） ----------------
 st.markdown("---")
 top_col1, top_col2, top_col3 = st.columns([1, 1, 2])
 
@@ -238,12 +251,10 @@ with top_col1:
 with top_col2:
     show_search = st.toggle("🔍 搜索备忘录", value=False)
 
-# 如果开启了“增加备忘录”开关，弹出录入表单
 if show_add_form:
     render_memo_input_form("top_add_form")
     st.markdown("---")
 
-# 如果开启了“搜索备忘录”开关，显示手机号搜索输入框
 search_phone_query = ""
 if show_search:
     with st.container():
@@ -265,7 +276,6 @@ if current_role == "staff":
     
     memos = load_memos()
     
-    # 如果开启了手机号搜索，进行过滤
     if show_search and search_phone_query.strip():
         memos = [m for m in memos if search_phone_query.strip() in m.get("phone", "")]
     
@@ -330,7 +340,7 @@ else:
     total_count = len(memos)
     urgent_count = sum(1 for m in memos if m["is_urgent"] and m["status"] not in ["已完成", "待删除审核"])
     pending_approval_count = sum(1 for m in memos if m["status"] in ["待审核", "待删除审核"])
-    total_revenue = sum(m["fee"] for m in memos if m["status"] not in ["_完成", "已完成", "待删除审核"] and m["status"] != "已完成")
+    total_revenue = sum(m["fee"] for m in memos if m["status"] not in ["已完成", "待删除审核"])
     
     col_a, col_b, col_c, col_d = st.columns(4)
     col_a.metric("总单数", f"{total_count} 单")
@@ -358,7 +368,6 @@ else:
     elif filter_option == "已完成单子":
         filtered_memos = [m for m in memos if m["status"] == "已完成"]
     
-    # 如果开启了手机号搜索，叠加过滤
     if show_search and search_phone_query.strip():
         filtered_memos = [m for m in filtered_memos if search_phone_query.strip() in m.get("phone", "")]
     
